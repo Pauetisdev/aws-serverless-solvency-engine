@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: Serverless Solvency Engine for Document Validation (Academic Project)
+
+
+Resources:
+  # DynamoDB table to store final results (APROVED, REJECTED, Ratio).
+  SolvencyResultsTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      TableName: SolvenciaResultsTable
+      PrimaryKey:
+        Name: DocumentId
+        Type: String
+      ProvisionedThroughput:
+        ReadCapacityUnits: 3
+        WriteCapacityUnits: 3
+      # Stream is activated for Fita 5 (Event from DB to Lambda)
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE 
+
+  # S3 Bucket for storing original PDF/Image documents (Input)
+  DocumentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: solvency-engine-documents-${AWS::AccountId} # Unique bucket name
+      # Security settings to block public access
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+
+  # Initial Lambda function that will trigger the Step Function.
+  DocumentTriggerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.handler
+      Runtime: python3.11
+      CodeUri: src/
+      Timeout: 10
+      MemorySize: 128
+      # Policy to allow writing to the DynamoDB results table (for later steps)
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SolvencyResultsTable

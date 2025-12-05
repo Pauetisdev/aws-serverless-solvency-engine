@@ -1,0 +1,26 @@
+version: 0.2
+
+phases:
+  install:
+    # Set the runtime version for the build environment
+    runtime-versions:
+      python: 3.11
+    commands:
+      - echo "Installing development dependencies..."
+      - pip install aws-sam-cli
+  build:
+    commands:
+      - echo "Executing unit tests (Not yet implemented, but crucial for quality)"
+      # Build the Lambda application (compiles/prepares the code)
+      - sam build
+      # Package the application for CloudFormation, uploading the .zip files to the S3 artifacts bucket
+      - sam package --output-template-file packaged.yaml --s3-bucket solvency-engine-artifacts-${AWS::AccountId}
+  post_build:
+    commands:
+      - echo "Build completed. Generated packaged.yaml."
+
+# The output artifact that CodePipeline needs to pass to CloudFormation
+artifacts:
+  type: zip
+  files:
+    - packaged.yaml

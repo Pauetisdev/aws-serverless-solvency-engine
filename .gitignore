@@ -1,0 +1,14 @@
+# Local dependencies
+node_modules/
+venv/
+__pycache__/
+.DS_Store
+
+# AWS/SAM configuration files to ignore
+.aws-sam/
+.env
+.idea/
+.vscode/
+
+# General build artifacts
+packaged.yaml
