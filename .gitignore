@@ -11,4 +11,7 @@ __pycache__/
 .vscode/
 
 # General build artifacts
-packaged.yaml
+packaged.yaml 
+
+# doc. not to gh
+Proposta_final_aws.docx
