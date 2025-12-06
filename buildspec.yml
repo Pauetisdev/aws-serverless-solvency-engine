@@ -2,7 +2,6 @@ version: 0.2
 
 phases:
   install:
-    # Definir el runtime per al BUILDER
     runtime-versions:
       python: 3.12
     commands:
@@ -11,17 +10,12 @@ phases:
   build:
     commands:
       - echo "Executing unit tests (Not yet implemented, but crucial for quality)"
-      # 1. Construir el codi i el template
       - sam build
-      # 2. Empaquetar (carrega el codi a S3 i genera packaged.yaml)
-      # Nota: Aquesta comanda utilitza la Bucket d'artefactes predefinida pel pipeline
       - sam package --output-template-file packaged.yaml --s3-bucket solvency-engine-artifacts-primer-deploy --region eu-north-1
   post_build:
     commands:
       - echo "Build completed. Generated packaged.yaml."
 
-# Definició dels Artifacts de sortida per a CodePipeline
-# CodePipeline només necessita el camí del fitxer.
 artifacts:
   files:
     - packaged.yaml
