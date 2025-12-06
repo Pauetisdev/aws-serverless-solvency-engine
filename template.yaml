@@ -2,28 +2,30 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 Description: Serverless Solvency Engine for Document Validation (Academic Project)
 
-
 Resources:
   # DynamoDB table to store final results (APROVED, REJECTED, Ratio).
   SolvencyResultsTable:
-    Type: AWS::Serverless::SimpleTable
+    Type: AWS::DynamoDB::Table 
     Properties:
       TableName: SolvenciaResultsTable
-      PrimaryKey:
-        Name: DocumentId
-        Type: String
+      AttributeDefinitions: # Necessari per a AWS::DynamoDB::Table
+        - AttributeName: DocumentId
+          AttributeType: S 
+      KeySchema: # Necessari per a AWS::DynamoDB::Table
+        - AttributeName: DocumentId
+          KeyType: HASH 
       ProvisionedThroughput:
         ReadCapacityUnits: 3
         WriteCapacityUnits: 3
-      # Stream is activated for Fita 5 (Event from DB to Lambda)
+      # Stream és necessari per a la Fita 5
       StreamSpecification:
         StreamViewType: NEW_IMAGE 
 
-  # S3 Bucket for storing original PDF/Image documents (Input)
+  # S3 Bucket for original documents (Nom simple i sense AccountId)
   DocumentsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: solvency-engine-documents-${AWS::AccountId} # Unique bucket name
+      BucketName: pv-solvency-documents-2025 # <-- NOM CORREGIT I SIMPLE
       # Security settings to block public access
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
@@ -34,11 +36,11 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: app.handler
-      Runtime: python3.11
+      Runtime: python3.12 # <-- Versió de Python consistent
       CodeUri: src/
       Timeout: 10
       MemorySize: 128
-      # Policy to allow writing to the DynamoDB results table (for later steps)
+      # Policy to allow writing to the DynamoDB results table
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref SolvencyResultsTable
