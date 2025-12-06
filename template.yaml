@@ -7,7 +7,7 @@ Resources:
   SolvencyResultsTable:
     Type: AWS::DynamoDB::Table 
     Properties:
-      TableName: SolvenciaResultsTable
+      TableName: SolvencyResultsTable
       AttributeDefinitions: # Necessari per a AWS::DynamoDB::Table
         - AttributeName: DocumentId
           AttributeType: S 
