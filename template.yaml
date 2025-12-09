@@ -3,24 +3,24 @@ Transform: 'AWS::Serverless-2016-10-31'
 Description: Serverless Solvency Engine for Document Validation (Academic Project)
 
 Resources:
-  # DynamoDB table to store final results (APROVED, REJECTED, Ratio).
+  # DynamoDB table to store final results (AProved, Rejected, Ratio)
   SolvencyResultsTable:
     Type: AWS::DynamoDB::Table 
     Properties:
-      TableName: SolvencyResultsTable
+      TableName: solvency-results-table 
       AttributeDefinitions:
         - AttributeName: DocumentId
-          AttributeType: S 
+          AttributeType: S
       KeySchema:
         - AttributeName: DocumentId
-          KeyType: HASH 
+          KeyType: HASH
       ProvisionedThroughput:
         ReadCapacityUnits: 3
         WriteCapacityUnits: 3
       StreamSpecification:
         StreamViewType: NEW_IMAGE 
 
-  # S3 Bucket for original documents
+  # S3 Bucket for storing original PDF/Image documents (Input)
   DocumentsBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -29,16 +29,130 @@ Resources:
         BlockPublicAcls: true
         BlockPublicPolicy: true
 
-  # Initial Lambda function that will trigger the Step Function.
+  # ----------------------------------------------------------------------
+  # FUNCIÓ OCR (Fita 3) - Utilitza Amazon Textract
+  # ----------------------------------------------------------------------
+  OCRFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: ocr_processor.handler
+      Runtime: python3.12
+      CodeUri: src/
+      Timeout: 60 
+      MemorySize: 256
+      Policies:
+        # Permission to use Amazon Textract
+        - Statement: 
+            Effect: Allow
+            Action:
+              - textract:AnalyzeDocument
+            Resource: "*"
+        # Permission to read from the documents bucket
+        - S3ReadPolicy:
+            BucketName: !Ref DocumentsBucket
+
+  # ----------------------------------------------------------------------
+  # FUNCIÓ DE DECISIÓ (Fita 4) - Utilitza Amazon Bedrock
+  # ----------------------------------------------------------------------
+  DecisionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: final_decision.handler
+      Runtime: python3.12
+      CodeUri: src/
+      Timeout: 90 
+      MemorySize: 512 
+      Policies:
+        # CRITICAL PERMISSION: Permission to invoke Amazon Bedrock
+        - Statement:
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource: "*"
+        # Permission to write the final result to DynamoDB
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SolvencyResultsTable
+
+  # ----------------------------------------------------------------------
+  # ROL AND STEP FUNCTION (Fites 2, 3 and 4)
+  # ----------------------------------------------------------------------
+  DocumentAnalysisStateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - states.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: DocumentAnalysisStateMachinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Permission to invoke both Lambdas (OCR and Decision)
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: 
+                  - !GetAtt OCRFunction.Arn 
+                  - !GetAtt DecisionFunction.Arn 
+
+  DocumentAnalysisStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: DocumentSolvencyWorkflow
+      DefinitionString: 
+        Fn::Sub: |
+          {
+            "Comment": "Final Workflow: OCR -> Bedrock Decision -> End.",
+            "StartAt": "StartOCR",
+            "States": {
+              "StartOCR": {
+                "Type": "Task",
+                "Resource": "${OCRFunction.Arn}", 
+                "ResultPath": "$.TextractResult", 
+                "Next": "ProcessAndDecide"
+              },
+              "ProcessAndDecide": {
+                "Type": "Task",
+                "Resource": "${DecisionFunction.Arn}",
+                "End": true
+              }
+            }
+          }
+      RoleArn: !GetAtt DocumentAnalysisStateMachineRole.Arn
+
+  # ----------------------------------------------------------------------
+  # LAMBDA TRIGGER (Fita 2) - API Gateway Entry Point
+  # ----------------------------------------------------------------------
   DocumentTriggerFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: app.handler
-      Runtime: python3.12
+      Runtime: python3.12 
       CodeUri: src/
       Timeout: 10
       MemorySize: 128
-      # Policy to allow writing to the DynamoDB results table
+      Environment: 
+        Variables:
+          STATE_MACHINE_ARN: !Ref DocumentAnalysisStateMachine 
+      # Add API Gateway Entry Point
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /documents
+            Method: POST
+      # Policies to start Step Function
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref SolvencyResultsTable
+        - Statement: 
+            Effect: Allow
+            Action:
+              - states:StartExecution
+            Resource: !Ref DocumentAnalysisStateMachine
